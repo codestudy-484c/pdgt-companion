@@ -8,7 +8,7 @@
     /* [4단계] 스트레스 수치 및 타이머 */
 
     // 임시 변수 (1단계 레이아웃 확인용)
-    let displayFace = 'ᓀ‸ᓂ ';
+    let displayFace = 'ᓀ‸ᓂ ';
 
     /* [5단계] PiP & Canvas 관련 함수 정의 구역 */
     const requestPermission = () => {
