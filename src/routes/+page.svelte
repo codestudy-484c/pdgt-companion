@@ -1,15 +1,56 @@
 <script lang="ts">
+    import { onMount } from 'svelte';
+
+    // [step 2] constants of 7 faces
+    const FACES = {
+        IDLE     : 'ᓀ‸ᓂ ',
+        QUESTION : 'ᓀ‸ᓂ?',
+        SUPRISE  : 'ᓀ‸ᓂ!',
+        ANNOYED  : 'ᓀ‸ᓂ@',
+        ANGRY    : 'ᓀ‸ᓂ+',
+        TROUBLE  : 'ᓀ‸ᓂ;',
+        BLINK    : 'ㅡ‸ㅡ '
+    };
+
     /* [2단계] 표정 상태 관리*/
-    // let currentFace = $state('ᓀ‸ᓂ ');
+    let currentFace = $state(FACES.IDLE);
+    let isInteracting = $state(false);
+
     // let isActive = $state(false);
 
     /* [3단계] 센서 권한 및 리스너 */
 
     /* [4단계] 스트레스 수치 및 타이머 */
 
-    // 임시 변수 (1단계 레이아웃 확인용)
-    let displayFace = 'ᓀ‸ᓂ ';
+    /* blinking */
+    $effect(() => {
+        let blinkTimeout: ReturnType<typeof setTimeout>;
 
+        const scheduleBlink = () => {
+            const nextBlinkDelay = Math.random() * 3000 + 2000;
+            
+            blinkTimeout= setTimeout(() => {
+                if (!isInteracting) {
+                    currentFace = FACES.BLINK;
+
+                    setTimeout(() => {
+                        if (!isInteracting) {
+                            currentFace = FACES.IDLE;
+                        }
+                    }, 200);
+                }
+
+                scheduleBlink();
+            }, nextBlinkDelay);
+        };
+        
+        scheduleBlink();
+
+        return () => {
+            clearTimeout(blinkTimeout);
+        };
+    });
+    
     /* [5단계] PiP & Canvas 관련 함수 정의 구역 */
     const requestPermission = () => {
         // Button for step 3 sensor permission asker logic
@@ -25,7 +66,7 @@
 <main>
     <section class="face-display">
         <div class="face-text">
-            {displayFace}
+            {currentFace}
         </div>
     </section>
     
