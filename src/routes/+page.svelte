@@ -1,5 +1,8 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    
+    let showControls = $state(true);
+    let controlsTimeout: ReturnType<typeof setTimeout>;
 
     // [step 2] constants of 7 faces
     const FACES = {
@@ -22,6 +25,17 @@
     let isSensorActive = $state(false);
     let permissionError = $state('');
 
+    const wakeControls = () => {
+        showControls = true;
+        clearTimeout(controlsTimeout);
+
+        if (isSensorActive) {
+            controlsTimeout = setTimeout(() => {
+                showControls = false;
+            }, 2500);
+        }
+    };
+
     /* [4단계] 스트레스 수치 및 타이머 */
     let stressCount = 0;        // no rendered
     let lastTriggerTime = 0;    // for debounce, prevent too much event
@@ -29,6 +43,11 @@
     let idleTimeout: ReturnType<typeof setTimeout>;
     let stressTimeout: ReturnType<typeof setTimeout>;
 
+    // PIP & Canas related vars
+    let canvasEl: HTMLCanvasElement | undefined = $state();
+    let videoEl: HTMLVideoElement | undefined = $state();
+    let isPipActive = $state(false);
+    
     /* [step 2] blinking */
     $effect(() => {
         let blinkTimeout: ReturnType<typeof setTimeout>;
@@ -52,12 +71,70 @@
         };
         
         scheduleBlink();
-
         return () => {
             clearTimeout(blinkTimeout);
         };
     });
     
+    /* [step 5] canvas infinte render and video stream connect */ 
+    $effect(() => {
+        const canvas = canvasEl;
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        
+        let animationId: number;
+
+        const drawLoop = () => {
+            // backgroundcolor set
+            ctx.fillStyle = '#f5ecd3';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+            // face drawing
+            ctx.fillStyle = '#5e5e5e';
+            ctx.font = "bold 120px Menlo, 'Courier New', Courier, monospace";
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.65)';
+            ctx.shadowBlur = 4;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 2;
+
+            ctx.fillText(currentFace, canvas.width / 2, canvas.height / 2);
+            
+            animationId = requestAnimationFrame(drawLoop);
+        };
+
+        // render
+        drawLoop();
+
+        // video stream connect for Init
+        if (videoEl && !videoEl.srcObject) {
+            const canvasStream = canvas.captureStream(15);
+            
+            try {
+                // silent audio
+                const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+                const audioCtx = new AudioContext();
+
+                const oscillator = audioCtx.createOscillator();
+                const dst = audioCtx.createMediaStreamDestination();
+
+                oscillator.connect(dst);
+
+                const dummyAudioTrack = dst.stream.getAudioTracks()[0];
+                canvasStream.addTrack(dummyAudioTrack);
+            } catch (e) {
+                console.warn('Audio track generation failed. continue:', e);
+            }
+
+            videoEl.srcObject = canvasStream;
+            videoEl.play().catch(e => console.error("video autoplay failed:", e));
+        }
+    });
+
     /* [step 4] sensor data function */
     const handleMotion = (event: DeviceMotionEvent) => {
         if (!isSensorActive) return;
@@ -120,6 +197,8 @@
                 if (permissionState === 'granted') {
                     window.addEventListener('devicemotion', handleMotion);
                     isSensorActive = true;
+                    videoEl?.play();
+                    wakeControls();
                 } else {
                     permissionError = 'Sensor Access permission denied. Allow Safari\'s sensor access permission on System Settings.';
                 }
@@ -128,6 +207,7 @@
                 // for Android/under iOS 13
                 window.addEventListener('devicemotion', handleMotion);
                 isSensorActive = true;
+                wakeControls();
             }
 
         } catch (error) {
@@ -137,32 +217,57 @@
     };
     
     /* [5단계] PiP & Canvas 관련 함수 정의 구역 */
-    const togglePiP = () => {
+    const togglePiP = async () => {
         // Button for step 5 PiP conversion logic
-        alert("Under Construction");
-    }
+        try {
+            if (document.pictureInPictureElement) {
+                await document.exitPictureInPicture();
+                isPipActive = false;
+            } else if (videoEl) {
+                if (document.pictureInPictureEnabled) {
+                    await videoEl.requestPictureInPicture();
+                    isPipActive = true;
+                } else if (typeof (videoEl as any).webkitSetPresentationMode === "function") {
+                    (videoEl as any).webkitSetPresentationMode('picture-in-picture');
+                    isPipActive = true;
+                }
+            } else {
+                alert('PIP Mode is not available on this device.');
+            }
+        } catch (error) {
+            console.error('PIP start Error:', error);
+            alert('An Error occured while start PIP mode.');
+        }
+    };
 </script>
 
+<svelte:window onclick={wakeControls} />
+
 <main>
+    <canvas bind:this={canvasEl} width="640" height="360" class="hidden-media"></canvas>
+    <video bind:this={videoEl} width="640" height="360" playsinline muted class="hidden-media"></video>
+   
     <section class="face-display">
         <div class="face-text">
             {currentFace}
         </div>
     </section>
     
-    <section class="controls">
+    <section class="controls" class:hidden={!showControls}>
 
         {#if permissionError}
             <div class="error-msg">{permissionError}</div>
         {/if}
+        
+        <div class="button-group">
+            <button class="btn primary" onclick={requestPermission} disabled={isSensorActive} title='sensor connect'>
+                {isSensorActive ? '⚡️' : '🔌' }
+            </button>
 
-        <button class="btn primary" onclick={requestPermission} disabled={isSensorActive}>
-            {isSensorActive ? 'Connected' : 'Connect to Device' }
-        </button>
-
-        <button class="btn secondary" onclick={togglePiP}>
-            Go To Pop-up
-        </button>
+            <button class="btn secondary" onclick={togglePiP} title = "PiP">
+                {isPipActive ? '⛔️' : '📺'}
+            </button>
+        </div>
     </section>
 </main>
 
@@ -194,6 +299,7 @@
         font-size: 5rem;
         font-weight: bold;
         transition: all 0.2s ease;
+        height: 100dvh;
     }
     
     .face-text {
@@ -203,26 +309,49 @@
 
     /* bottom Btns */
     .controls {
+        position: fixed;
+        bottom: 30px;
+        left: 0;
+        right: 0;
         padding: 2rem;
         display: flex;
         flex-direction: column;
         gap: 1rem;
         padding-bottom: calc(2rem + env(safe-area-inset-bottom));
+        transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+
+    .controls.hidden {
+        opacity: 0;
+        transform: translateY(20px);
+        pointer-events: none;
+    }
+
+    .button-group {
+        display: flex;
+        flex-direction: row;
+        justify-content: center;
+        gap: 1.5rem;
     }
 
     .btn {
         border: none;
-        border-radius: 16px;
-        padding: 1.2rem;
-        font-size: 1.1rem;
-        font-weight: 600;
+        width: 4rem;
+        height: 4rem;
+        border-radius: 50%;
+        font-size: 1.8rem;
+        
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
         cursor: pointer;
         transition: transform 0.1s active;
         font-family: inherit;
     }
 
     .btn:active {
-        transform: scale(0.98);
+        transform: scale(0.92);
     }
 
     .primary {
@@ -250,5 +379,15 @@
         background-color: #a0a0a0;
         cursor: not-allowed;
         transform: none;
+    }
+
+    /* browser hidden-render */
+    .hidden-media {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0.01;
+        pointer-events: none;
+        z-index: -100;
     }
 </style>
