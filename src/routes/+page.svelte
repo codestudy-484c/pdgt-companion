@@ -5,7 +5,7 @@
     const FACES = {
         IDLE     : 'ᓀ‸ᓂ ',
         QUESTION : 'ᓀ‸ᓂ?',
-        SUPRISE  : 'ᓀ‸ᓂ!',
+        SURPRISE : 'ᓀ‸ᓂ!',
         ANNOYED  : 'ᓀ‸ᓂ@',
         ANGRY    : 'ᓀ‸ᓂ+',
         TROUBLE  : 'ᓀ‸ᓂ;',
@@ -23,8 +23,13 @@
     let permissionError = $state('');
 
     /* [4단계] 스트레스 수치 및 타이머 */
+    let stressCount = 0;        // no rendered
+    let lastTriggerTime = 0;    // for debounce, prevent too much event
 
-    /* blinking */
+    let idleTimeout: ReturnType<typeof setTimeout>;
+    let stressTimeout: ReturnType<typeof setTimeout>;
+
+    /* [step 2] blinking */
     $effect(() => {
         let blinkTimeout: ReturnType<typeof setTimeout>;
 
@@ -57,8 +62,50 @@
     const handleMotion = (event: DeviceMotionEvent) => {
         if (!isSensorActive) return;
 
-        // TODO: event.acceleration logic
-        console.log(event.acceleration?.x, event.acceleration?.y);
+        const x = event.acceleration?.x || 0;
+        const y = event.acceleration?.y || 0;
+        const z = event.acceleration?.z || 0;
+        
+        // calc magnitude with x^2+y^2+z^2 = s^2)
+        const magnitude = Math.sqrt(x*x + y*y + z*z);
+
+        // noise filter
+        if (magnitude < 0.4) return;
+
+        // event debounce: frequent event drop
+        const now = Date.now();
+        if (now - lastTriggerTime < 750) return;
+        lastTriggerTime = now;
+        
+        // interaction
+        isInteracting = true;
+        stressCount += 0.5;
+
+        // face mapping
+        if (stressCount > 10 ) {
+            currentFace = FACES.TROUBLE;
+        } else if (stressCount > 7 || magnitude > 3.5) {
+            currentFace = FACES.ANNOYED;
+        } else if (stressCount > 5 || magnitude > 1.0) {
+            currentFace = FACES.ANGRY;
+        } else if (magnitude > 0.75 || (stressCount > 2 && stressCount < 4)) {
+            currentFace = FACES.SURPRISE;
+        } else {
+            currentFace = FACES.QUESTION;
+        }
+
+        // back to IDLE
+        clearTimeout(idleTimeout);
+        idleTimeout = setTimeout(()=> {
+            isInteracting = false;
+            currentFace = FACES.IDLE;
+        }, 750);
+
+        // reset stressTimeout
+        clearTimeout(stressTimeout);
+        stressTimeout = setTimeout(()=> {
+            stressCount = 0;
+        }, 3000);
     };
 
     /* [step 3] Sensor Permission asking for iOS */
