@@ -19,6 +19,8 @@
     // let isActive = $state(false);
 
     /* [3단계] 센서 권한 및 리스너 */
+    let isSensorActive = $state(false);
+    let permissionError = $state('');
 
     /* [4단계] 스트레스 수치 및 타이머 */
 
@@ -51,12 +53,43 @@
         };
     });
     
-    /* [5단계] PiP & Canvas 관련 함수 정의 구역 */
-    const requestPermission = () => {
-        // Button for step 3 sensor permission asker logic
-        alert("Under Construction");
-    }
+    /* [step 4] sensor data function */
+    const handleMotion = (event: DeviceMotionEvent) => {
+        if (!isSensorActive) return;
+
+        // TODO: event.acceleration logic
+        console.log(event.acceleration?.x, event.acceleration?.y);
+    };
+
+    /* [step 3] Sensor Permission asking for iOS */
+    const requestPermission = async () => {
+        try {
+            permissionError = '';       // Error Message Init
+
+            // Check for device run iOS/iPadOS 13+
+            if (typeof (DeviceMotionEvent as any).requestPermission === 'function') {
+                const permissionState = await (DeviceMotionEvent as any).requestPermission();
+                
+                if (permissionState === 'granted') {
+                    window.addEventListener('devicemotion', handleMotion);
+                    isSensorActive = true;
+                } else {
+                    permissionError = 'Sensor Access permission denied. Allow Safari\'s sensor access permission on System Settings.';
+                }
+
+            } else {
+                // for Android/under iOS 13
+                window.addEventListener('devicemotion', handleMotion);
+                isSensorActive = true;
+            }
+
+        } catch (error) {
+            console.error('Error occured while get permission:', error);
+            permissionError = 'Cannot get permission: Check for HTTPS';
+        }
+    };
     
+    /* [5단계] PiP & Canvas 관련 함수 정의 구역 */
     const togglePiP = () => {
         // Button for step 5 PiP conversion logic
         alert("Under Construction");
@@ -71,8 +104,13 @@
     </section>
     
     <section class="controls">
-        <button class="btn primary" onclick={requestPermission}>
-            Connect to Device
+
+        {#if permissionError}
+            <div class="error-msg">{permissionError}</div>
+        {/if}
+
+        <button class="btn primary" onclick={requestPermission} disabled={isSensorActive}>
+            {isSensorActive ? 'Connected' : 'Connect to Device' }
         </button>
 
         <button class="btn secondary" onclick={togglePiP}>
@@ -149,5 +187,21 @@
         background-color: rgba(94, 94, 94, 0.1);
         color: #5e5e5e;
         border: 1px solid rgba(94, 94, 94, 0.2);
+    }
+
+    /* error-message style */
+    .error-msg {
+        color: #e74c3c;
+        font-size: 0.9rem;
+        text-align: center;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+    }
+
+    /* disable button */
+    .btn:disabled {
+        background-color: #a0a0a0;
+        cursor: not-allowed;
+        transform: none;
     }
 </style>
