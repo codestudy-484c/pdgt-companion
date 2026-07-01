@@ -241,6 +241,10 @@
     };
 </script>
 
+<svelte:head>
+    <title>FidgetPal</title>
+</svelte:head>
+
 <svelte:window onclick={wakeControls} />
 
 <main>
