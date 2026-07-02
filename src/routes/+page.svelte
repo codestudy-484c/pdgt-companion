@@ -85,8 +85,19 @@
         if (!ctx) return;
         
         let animationId: number;
+        let lastDrawTime = 0;
+        const fpsInterval = 1000 / 4;
 
-        const drawLoop = () => {
+
+        const drawLoop = (timestamp: number) => {
+            animationId = requestAnimationFrame(drawLoop);
+
+            const elapsed = timestamp - lastDrawTime;
+
+            if (elapsed > fpsInterval) {
+                lastDrawTime = timestamp - (elapsed % fpsInterval);
+            }
+
             // backgroundcolor set
             ctx.fillStyle = '#f5ecd3';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -104,15 +115,14 @@
 
             ctx.fillText(currentFace, canvas.width / 2, canvas.height / 2);
             
-            animationId = requestAnimationFrame(drawLoop);
         };
-
+        
         // render
-        drawLoop();
+        requestAnimationFrame(drawLoop);
 
         // video stream connect for Init
         if (videoEl && !videoEl.srcObject) {
-            const canvasStream = canvas.captureStream(15);
+            const canvasStream = canvas.captureStream(4);
             
             try {
                 // silent audio
